@@ -1,0 +1,2 @@
+# Solo para el script de carga de datos en tu PC (en Lambda boto3 ya viene incluido en el runtime)
+boto3>=1.35

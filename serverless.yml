@@ -1,0 +1,111 @@
+
+service: itsm-incidentes
+frameworkVersion: '4'
+
+custom:
+  authorizer:              # mismo authorizer Cognito en todos los endpoints
+    name: cognitoAuth
+    type: COGNITO_USER_POOLS
+    arn: ${cf:itsm-base-${self:provider.stage}.UserPoolArn}
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 20
+  iam:
+    role: arn:aws:iam::777000342473:role/LabRole
+  environment:
+    TABLE: ${self:service}-${self:provider.stage}
+    TOPIC_ARN: ${cf:itsm-base-${self:provider.stage}.IncidentesTopicArn}
+    BUCKET: ${cf:itsm-base-${self:provider.stage}.AdjuntosBucketName}
+
+  
+functions:
+  crear:
+    handler: src/crear.handler
+    events:
+      - http:
+          path: incidentes
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+
+  listar:
+    handler: src/listar.handler
+    events:
+      - http:
+          path: incidentes
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+
+  obtener:
+    handler: src/obtener.handler
+    events:
+      - http:
+          path: incidentes/{id}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+
+  actualizar:
+    handler: src/actualizar.handler
+    events:
+      - http:
+          path: incidentes/{id}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+
+  adjuntos:
+    handler: src/adjuntos.handler
+    events:
+      - http:
+          path: incidentes/{id}/adjuntos
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+
+  # Consumidor de "problema-resuelto": cierra los incidentes vinculados.
+  problemaResuelto:
+    handler: src/problemaResuelto.handler
+    timeout: 30
+    events:
+      - sqs:
+          arn: !GetAtt ProblemaResueltoQueue.Arn
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
+
+resources:
+  Resources:
+    IncidentesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: tenant_id, AttributeType: S }
+          - { AttributeName: incidente_id, AttributeType: S }
+          - { AttributeName: estado_fecha, AttributeType: S }
+        KeySchema:
+          - { AttributeName: tenant_id, KeyType: HASH }
+          - { AttributeName: incidente_id, KeyType: RANGE }     
+        GlobalSecondaryIndexes:
+          - IndexName: GSI1
+            KeySchema:
+              - { AttributeName: tenant_id, KeyType: HASH }
+              - { AttributeName: estado_fecha, KeyType: RANGE }
+            Projection: { ProjectionType: ALL }
+
+
+  Outputs:
+    IncidentesTableName:
+      Value: !Ref IncidentesTable
+    IncidentesApiUrl:
+      Description: URL base para la variable de entorno del frontend en Amplify
+      Value: !Join ['', ['https://', !Ref ApiGatewayRestApi, '.execute-api.', !Ref 'AWS::Region', '.amazonaws.com/', '${self:provider.stage}']]
+    ProblemaResueltoDLQUrl:
+      Value: !Ref ProblemaResueltoDLQ

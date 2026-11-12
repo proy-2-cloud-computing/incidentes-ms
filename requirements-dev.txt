@@ -1,0 +1,2 @@
+-r requirements.txt
+moto[dynamodb,sns,sqs,s3]>=5.0
