@@ -100,6 +100,68 @@ resources:
               - { AttributeName: estado_fecha, KeyType: RANGE }
             Projection: { ProjectionType: ALL }
 
+    ProblemaResueltoDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-problema-resuelto-dlq
+        MessageRetentionPeriod: 1209600
+
+    ProblemaResueltoQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-problema-resuelto
+        VisibilityTimeout: 180
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ProblemaResueltoDLQ.Arn
+          maxReceiveCount: 5
+
+    ProblemaResueltoSubscription:
+      Type: AWS::SNS::Subscription
+      DependsOn:
+        - ProblemaResueltoQueuePolicy
+      Properties:
+        TopicArn: ${cf:itsm-base-${self:provider.stage}.ProblemasTopicArn}
+        Protocol: sqs
+        Endpoint: !GetAtt ProblemaResueltoQueue.Arn
+        RawMessageDelivery: true
+        FilterPolicyScope: MessageAttributes
+        FilterPolicy:
+          tipo: [problema-resuelto]
+
+    ProblemaResueltoQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref ProblemaResueltoQueue]
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal: { Service: sns.amazonaws.com }
+              Action: sqs:SendMessage
+              Resource: !GetAtt ProblemaResueltoQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: ${cf:itsm-base-${self:provider.stage}.ProblemasTopicArn}
+
+    # CORS tambien en errores generados por API Gateway (401/403 del authorizer, 5XX)
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseType: DEFAULT_4XX
+        RestApiId: !Ref ApiGatewayRestApi
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+
+    GatewayResponseDefault5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseType: DEFAULT_5XX
+        RestApiId: !Ref ApiGatewayRestApi
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+
 
   Outputs:
     IncidentesTableName:
