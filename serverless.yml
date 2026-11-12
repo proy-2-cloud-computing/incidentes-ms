@@ -107,5 +107,4 @@ resources:
     IncidentesApiUrl:
       Description: URL base para la variable de entorno del frontend en Amplify
       Value: !Join ['', ['https://', !Ref ApiGatewayRestApi, '.execute-api.', !Ref 'AWS::Region', '.amazonaws.com/', '${self:provider.stage}']]
-    ProblemaResueltoDLQUrl:
-      Value: !Ref ProblemaResueltoDLQ
+
