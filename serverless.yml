@@ -16,7 +16,7 @@ provider:
   memorySize: 256
   timeout: 20
   iam:
-    role: arn:aws:iam::777000342473:role/LabRole
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
   environment:
     TABLE: ${self:service}-${self:provider.stage}
     TOPIC_ARN: ${cf:itsm-base-${self:provider.stage}.IncidentesTopicArn}
