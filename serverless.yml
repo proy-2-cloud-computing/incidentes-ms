@@ -68,6 +68,11 @@ functions:
           method: post
           cors: true
           authorizer: ${self:custom.authorizer}
+      - http:
+          path: incidentes/{id}/adjuntos
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
 
   # Consumidor de "problema-resuelto": cierra los incidentes vinculados.
   problemaResuelto:

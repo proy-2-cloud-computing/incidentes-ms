@@ -158,6 +158,22 @@ class HandlersTest(unittest.TestCase):
         self.assertEqual(det["adjuntos"], [data["key"]])
         self.assertEqual(self.adjuntos(evento("empresa-otro", "agente", {"nombre_archivo": "a.png"}, inc["incidente_id"]))["statusCode"], 404)
 
+    def test_adjuntos_listar_con_url_de_descarga(self):
+        inc = self.nuevo("empresa-desc")
+        key = cuerpo(self.adjuntos(evento("empresa-desc", "agente", {"nombre_archivo": "log.txt"}, inc["incidente_id"])))["key"]
+        ev = evento("empresa-desc", "solicitante", id_=inc["incidente_id"].replace("#", "%23"))
+        ev["httpMethod"] = "GET"
+        r = self.adjuntos(ev)
+        self.assertEqual(r["statusCode"], 200, r["body"])
+        data = cuerpo(r)
+        self.assertEqual([a["nombre"] for a in data["adjuntos"]], ["log.txt"])
+        self.assertEqual(data["adjuntos"][0]["key"], key)
+        self.assertIn("bucket-adjuntos-test", data["adjuntos"][0]["download_url"])
+        # otro tenant no ve el incidente
+        ajeno = evento("empresa-otro", "agente", id_=inc["incidente_id"])
+        ajeno["httpMethod"] = "GET"
+        self.assertEqual(self.adjuntos(ajeno)["statusCode"], 404)
+
     def test_consumidor_problema_resuelto_idempotente_y_con_aislamiento(self):
         a = self.nuevo("empresa-cons")["incidente_id"]
         b = self.nuevo("empresa-cons")["incidente_id"]

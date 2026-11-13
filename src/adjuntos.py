@@ -16,6 +16,44 @@ EXPIRA_SEGUNDOS = 300
 
 @envolver
 def handler(event):
+    """POST /incidentes/{id}/adjuntos -> URL prefirmada de subida.
+    GET  /incidentes/{id}/adjuntos -> adjuntos con URL prefirmada de descarga."""
+    if str(event.get("httpMethod", "")).upper() == "GET":
+        return _listar(event)
+    return _firmar_subida(event)
+
+
+def _listar(event):
+    """Cualquier usuario del tenant que puede ver el incidente puede abrir sus adjuntos."""
+    ctx = get_context(event)
+    incidente_id = id_de_path(event)
+    item = repo.get_incidente(ctx.tenant_id, incidente_id)
+    if not item:
+        raise HttpError(404, "Incidente no encontrado")
+
+    prefijo = f"{ctx.tenant_id}/incidentes/{id_para_s3(incidente_id)}/"
+    adjuntos = [
+        {
+            "key": key,
+            "nombre": key.rsplit("/", 1)[-1],
+            "download_url": s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": os.environ["BUCKET"], "Key": key},
+                ExpiresIn=EXPIRA_SEGUNDOS,
+            ),
+        }
+        for key in (item.get("adjuntos") or [])
+        # Defensa extra: solo se firman keys de la carpeta de este incidente.
+        if isinstance(key, str) and key.startswith(prefijo) and ".." not in key
+    ]
+    return respuesta(200, {
+        "incidente_id": incidente_id,
+        "adjuntos": adjuntos,
+        "expira_en_segundos": EXPIRA_SEGUNDOS,
+    })
+
+
+def _firmar_subida(event):
     """POST /incidentes/{id}/adjuntos  body: { nombre_archivo, content_type }
     Devuelve una URL prefirmada (PUT): el navegador sube directo a S3 bajo {tenant_id}/incidentes/{id}/"""
     ctx = get_context(event)
